@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sistem Unggah Laporan Keuangan Aman</title>
+    <script src="https://accounts.google.com/gsi/client" async defer></script>
+    <style>
+        :root {
+            --primary: #0f172a; /* Warna gelap formal / secure */
+            --accent: #0284c7;  /* Biru finansial */
+            --success: #10b981;
+            --border: #e2e8f0;
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            background-color: #f8fafc;
+            margin: 0; padding: 0;
+            display: flex; justify-content: center; align-items: center; min-height: 100vh;
+        }
+        .card {
+            background: #ffffff;
+            padding: 40px;
+            border-radius: 12px;
+            box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05), 0 8px 10px -6px rgba(0, 0, 0, 0.05);
+            width: 100%; max-width: 480px;
+            box-sizing: border-box;
+            border: 1px solid var(--border);
+        }
+        .header { text-align: center; margin-bottom: 30px; }
+        .header h1 { font-size: 20px; color: var(--primary); margin: 0 0 10px 0; font-weight: 700; }
+        .header p { font-size: 14px; color: #64748b; margin: 0; }
+        .form-group { margin-bottom: 24px; }
+        label { display: block; font-size: 14px; font-weight: 600; color: #334155; margin-bottom: 8px; }
+        input[type="file"] {
+            width: 100%; padding: 12px;
+            border: 2px dashed #cbd5e1; border-radius: 8px;
+            background: #f1f5f9; cursor: pointer; box-sizing: border-box;
+        }
+        button {
+            width: 100%; padding: 14px; background: var(--accent); color: white;
+            border: none; border-radius: 6px; font-size: 15px; font-weight: 600;
+            cursor: pointer; transition: background 0.2s;
+        }
+        button:hover { background: #0369a1; }
+        button:disabled { background: #94a3b8; cursor: not-allowed; }
+        .hidden { display: none !important; }
+        
+        /* Progress Bar Desain */
+        .progress-container { margin-top: 20px; background: #e2e8f0; border-radius: 9999px; overflow: hidden; height: 12px; }
+        .progress-bar { background: var(--success); width: 0%; height: 100%; transition: width 0.1s linear; }
+        .status-text { font-size: 13px; text-align: center; margin-top: 8px; font-weight: 500; color: #475569; }
+        
+        /* Tombol Google Custom */
+        #googleBtnContainer { display: flex; justify-content: center; margin-top: 20px; }
+    </style>
+</head>
+<body>
+
+<div class="card">
+    <div id="loginSection">
+        <div class="header">
+            <h1>Sistem Dokumen Keuangan</h1>
+            <p>Otentikasi khusus 20 personel yang diotorisasi.</p>
+        </div>
+        <div id="googleBtnContainer">
+            <div id="g_id_onload"
+                 data-client_id="996424694634-4776lvfa68sejhcs58s6pla3k8hjk97h.apps.googleusercontent.com"
+                 data-context="signin"
+                 data-callback="handleCredentialResponse"
+                 data-auto_select="false"
+                 data-close_on_tap_outside="false">
+            </div>
+            <div class="g_id_signin" data-type="standard" data-shape="rectangular" data-theme="filled_blue" data-text="signin_with" data-size="large"></div>
+        </div>
+    </div>
+
+    <div id="uploadSection" class="hidden">
+        <div class="header">
+            <h1>Unggah Dokumen Keuangan</h1>
+            <p id="userWelcome">Selamat datang</p>
+        </div>
+        
+        <div class="form-group">
+            <label>Pilih File Laporan (Mendukung 1 GB+)</label>
+            <input type="file" id="filePicker">
+        </div>
+        
+        <button id="submitBtn" onclick="initiateResumableUpload()">Mulai Unggah Secara Aman</button>
+        
+        <div id="progressArea" class="hidden">
+            <div class="progress-container"><div class="progress-bar" id="progressBar"></div></div>
+            <div class="status-text" id="statusLabel">Menghubungkan ke server enkripsi Google...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let accessToken = "";
+    const ALLOWED_USERS = [
+        "bid.poldagri.kepri@gmail.com", 
+        "user2@instansi.go.id"
+        // Masukkan daftar 20 email lengkap Anda di sini untuk proteksi ganda hardcoded
+    ];
+
+    // 1. Menangani Token setelah Pengguna Login ke Akun Google Mereka
+    function handleCredentialResponse(response) {
+        // Mendekode payload JWT Token dari Google untuk verifikasi email
+        const base64Url = response.credential.split('.')[1];
+        const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
+        const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
+            return '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2);
+        }).join(''));
+        
+        const userProfile = JSON.parse(jsonPayload);
+        
+        // Proteksi Tambahan: Cek apakah email terdaftar di list 20 orang Anda
+        // Jika Anda mensetting 'Internal' di GCP langkah 1, pengecekan ini opsional
+        if(ALLOWED_USERS.length > 0 && !ALLOWED_USERS.includes(userProfile.email)) {
+            alert("Akses Ditolak: Akun Google Anda tidak terdaftar sebagai pengelola laporan keuangan!");
+            return;
+        }
+
+        // Meminta Access Token implisit untuk hak akses tulis ke Google Drive API
+        // Google Identity Services SDK flow penukaran token
+        google.accounts.oauth2.initTokenClient({
+            client_id: '996424694634-4776lvfa68sejhcs58s6pla3k8hjk97h.apps.googleusercontent.com',
+            scope: 'https://www.googleapis.com/auth/drive.file',
+            callback: (tokenResponse) => {
+                accessToken = tokenResponse.access_token;
+                if (accessToken) {
+                    document.getElementById("loginSection").classList.add("hidden");
+                    document.getElementById("uploadSection").classList.remove("hidden");
+                    document.getElementById("userWelcome").innerText = `Otorisasi Sah: ${userProfile.name} (${userProfile.email})`;
+                }
+            }
+        }).requestAccessToken();
+    }
+
+    // 2. LOGIKA UTAMA: Melakukan Resumable Chunk Upload ke Google Drive untuk File 1 GB+
+    async function initiateResumableUpload() {
+        const filePicker = document.getElementById("filePicker");
+        if (filePicker.files.length === 0) { alert("Pilih file terlebih dahulu!"); return; }
+
+        const file = filePicker.files[0];
+        const submitBtn = document.getElementById("submitBtn");
+        const progressArea = document.getElementById("progressArea");
+        const progressBar = document.getElementById("progressBar");
+        const statusLabel = document.getElementById("statusLabel");
+
+        submitBtn.disabled = true;
+        progressArea.classList.remove("hidden");
+
+        // Langkah A: Meminta Sesi Upload Kosong ke Google Drive (Resumable Session)
+        const metadata = { name: file.name, mimeType: file.type };
+        
+        try {
+            const sessionResponse = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
+                method: "POST",
+                headers: {
+                    "Authorization": `Bearer ${accessToken}`,
+                    "Content-Type": "application/json; charset=UTF-8",
+                    "X-Upload-Content-Type": file.type,
+                    "X-Upload-Content-Length": file.size
+                },
+                body: JSON.stringify(metadata)
+            });
+
+            if (!sessionResponse.ok) throw new Error("Gagal menginisiasi jalur aman Google.");
+            
+            // Google membalas dengan URL lokasi khusus unik untuk mengunggah file ini
+            const uploadLocationUrl = sessionResponse.headers.get("Location");
+            
+            // Langkah B: Mulai mengunggah file per potongan data (Chunk) kecil agar hemat RAM browser
+            const chunkSize = 1024 * 1024 * 5; // Kita potong file per 5 Megabyte
+            let startByte = 0;
+
+            while (startByte < file.size) {
+                const endByte = Math.min(startByte + chunkSize, file.size);
+                const chunk = file.slice(startByte, endByte);
+                
+                statusLabel.innerText = `Mengirim data aman... (${Math.round((startByte / file.size) * 100)}%)`;
+
+                const chunkResponse = await fetch(uploadLocationUrl, {
+                    method: "PUT",
+                    headers: {
+                        "Content-Range": `bytes ${startByte}-${endByte - 1}/${file.size}`,
+                        "Content-Type": file.type
+                    },
+                    body: chunk
+                });
+
+                if (chunkResponse.status === 308) {
+                    // 308 Resume Incomplete: Potongan berhasil diterima, lanjut ke potongan berikutnya
+                    startByte = endByte;
+                    progressBar.style.width = `${(startByte / file.size) * 100}%`;
+                } else if (chunkResponse.ok) {
+                    // Upload Selesai Total (Status 200/201)
+                    progressBar.style.width = "100%";
+                    statusLabel.innerText = "Laporan Keuangan Berhasil Diunggah Secara Enkripsi!";
+                    statusLabel.style.color = "var(--success)";
+                    filePicker.value = "";
+                    submitBtn.disabled = false;
+                    break;
+                } else {
+                    throw new Error("Koneksi terputus di tengah jalan.");
+                }
+            }
+
+        } catch (error) {
+            alert("Kesalahan Sistem: " + error.message);
+            statusLabel.innerText = "Gagal Mengunggah. Silakan coba kembali.";
+            statusLabel.style.color = "red";
+            submitBtn.disabled = false;
+        }
+    }
+</script>
+
+</body>
+</html>

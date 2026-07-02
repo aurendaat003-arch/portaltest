@@ -4,10 +4,11 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sistem Unggah Laporan Keuangan Aman</title>
+    <!-- Library Otentikasi Resmi Google Identity Services -->
     <script src="https://accounts.google.com/gsi/client" async defer></script>
     <style>
         :root {
-            --primary: #0f172a; /* Warna gelap formal / secure */
+            --primary: #0f172a; /* Warna gelap secure & formal */
             --accent: #0284c7;  /* Biru finansial */
             --success: #10b981;
             --border: #e2e8f0;
@@ -46,26 +47,27 @@
         button:disabled { background: #94a3b8; cursor: not-allowed; }
         .hidden { display: none !important; }
         
-        /* Progress Bar Desain */
+        /* Desain Progress Bar & Status (Mobile Friendly) */
         .progress-container { margin-top: 20px; background: #e2e8f0; border-radius: 9999px; overflow: hidden; height: 12px; }
         .progress-bar { background: var(--success); width: 0%; height: 100%; transition: width 0.1s linear; }
         .status-text { font-size: 13px; text-align: center; margin-top: 8px; font-weight: 500; color: #475569; }
         
-        /* Tombol Google Custom */
         #googleBtnContainer { display: flex; justify-content: center; margin-top: 20px; }
     </style>
 </head>
 <body>
 
 <div class="card">
+    <!-- SEKSI 1: GERBANG LOGIN OAUTH -->
     <div id="loginSection">
         <div class="header">
             <h1>Sistem Dokumen Keuangan</h1>
-            <p>Otentikasi khusus 20 personel yang diotorisasi.</p>
+            <p>Otentikasi khusus personel yang diotorisasi.</p>
         </div>
         <div id="googleBtnContainer">
+            <!-- Isi data-client_id dengan Client ID asli Anda -->
             <div id="g_id_onload"
-                 data-client_id="996424694634-4776lvfa68sejhcs58s6pla3k8hjk97h.apps.googleusercontent.com"
+                 data-client_id="PASTE_CLIENT_ID_ANDA_DI_SINI"
                  data-context="signin"
                  data-callback="handleCredentialResponse"
                  data-auto_select="false"
@@ -75,6 +77,7 @@
         </div>
     </div>
 
+    <!-- SEKSI 2: FORM UTAMA UPLOAD (TERKUNCI SEBELUM LOGIN) -->
     <div id="uploadSection" class="hidden">
         <div class="header">
             <h1>Unggah Dokumen Keuangan</h1>
@@ -97,15 +100,15 @@
 
 <script>
     let accessToken = "";
+    
+    // DAFTARKAN EMAIL 20 TIM ANDA DI SINI
     const ALLOWED_USERS = [
-        "bid.poldagri.kepri@gmail.com", 
-        "user2@instansi.go.id"
-        // Masukkan daftar 20 email lengkap Anda di sini untuk proteksi ganda hardcoded
+        "pegawai1@gmail.com", 
+        "bendahara@kepriprov.go.id"
     ];
 
-    // 1. Menangani Token setelah Pengguna Login ke Akun Google Mereka
+    // Menangani Verifikasi Token Akun setelah Pengguna Berhasil Login
     function handleCredentialResponse(response) {
-        // Mendekode payload JWT Token dari Google untuk verifikasi email
         const base64Url = response.credential.split('.')[1];
         const base64 = base64Url.replace(/-/g, '+').replace(/_/g, '/');
         const jsonPayload = decodeURIComponent(window.atob(base64).split('').map(function(c) {
@@ -114,30 +117,28 @@
         
         const userProfile = JSON.parse(jsonPayload);
         
-        // Proteksi Tambahan: Cek apakah email terdaftar di list 20 orang Anda
-        // Jika Anda mensetting 'Internal' di GCP langkah 1, pengecekan ini opsional
+        // Pengecekan Keamanan Ganda di Sisi Klien
         if(ALLOWED_USERS.length > 0 && !ALLOWED_USERS.includes(userProfile.email)) {
-            alert("Akses Ditolak: Akun Google Anda tidak terdaftar sebagai pengelola laporan keuangan!");
+            alert("Akses Ditolak: Akun Google Anda tidak terdaftar dalam sistem!");
             return;
         }
 
-        // Meminta Access Token implisit untuk hak akses tulis ke Google Drive API
-        // Google Identity Services SDK flow penukaran token
+        // Meminta Otorisasi Tulis (Write Access) ke Google Drive API
         google.accounts.oauth2.initTokenClient({
-            client_id: '996424694634-4776lvfa68sejhcs58s6pla3k8hjk97h.apps.googleusercontent.com',
+            client_id: 'PASTE_CLIENT_ID_ANDA_DI_SINI',
             scope: 'https://www.googleapis.com/auth/drive.file',
             callback: (tokenResponse) => {
                 accessToken = tokenResponse.access_token;
                 if (accessToken) {
                     document.getElementById("loginSection").classList.add("hidden");
                     document.getElementById("uploadSection").classList.remove("hidden");
-                    document.getElementById("userWelcome").innerText = `Otorisasi Sah: ${userProfile.name} (${userProfile.email})`;
+                    document.getElementById("userWelcome").innerText = `Otorisasi Sah: ${userProfile.name}`;
                 }
             }
         }).requestAccessToken();
     }
 
-    // 2. LOGIKA UTAMA: Melakukan Resumable Chunk Upload ke Google Drive untuk File 1 GB+
+    // Mengunggah File Besar Berbasis Resumable Chunk Upload (Potongan 5MB)
     async function initiateResumableUpload() {
         const filePicker = document.getElementById("filePicker");
         if (filePicker.files.length === 0) { alert("Pilih file terlebih dahulu!"); return; }
@@ -151,10 +152,10 @@
         submitBtn.disabled = true;
         progressArea.classList.remove("hidden");
 
-        // Langkah A: Meminta Sesi Upload Kosong ke Google Drive (Resumable Session)
         const metadata = { name: file.name, mimeType: file.type };
         
         try {
+            // Meminta URL Sesi Khusus dari Google Drive
             const sessionResponse = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable", {
                 method: "POST",
                 headers: {
@@ -166,13 +167,12 @@
                 body: JSON.stringify(metadata)
             });
 
-            if (!sessionResponse.ok) throw new Error("Gagal menginisiasi jalur aman Google.");
+            if (!sessionResponse.ok) throw new Error("Gagal menginisiasi enkripsi jalur Google.");
             
-            // Google membalas dengan URL lokasi khusus unik untuk mengunggah file ini
             const uploadLocationUrl = sessionResponse.headers.get("Location");
             
-            // Langkah B: Mulai mengunggah file per potongan data (Chunk) kecil agar hemat RAM browser
-            const chunkSize = 1024 * 1024 * 5; // Kita potong file per 5 Megabyte
+            // Proses memotong file dan mengirim secara estafet
+            const chunkSize = 1024 * 1024 * 5; // Potongan per 5 Megabyte
             let startByte = 0;
 
             while (startByte < file.size) {
@@ -191,13 +191,11 @@
                 });
 
                 if (chunkResponse.status === 308) {
-                    // 308 Resume Incomplete: Potongan berhasil diterima, lanjut ke potongan berikutnya
                     startByte = endByte;
                     progressBar.style.width = `${(startByte / file.size) * 100}%`;
                 } else if (chunkResponse.ok) {
-                    // Upload Selesai Total (Status 200/201)
                     progressBar.style.width = "100%";
-                    statusLabel.innerText = "Laporan Keuangan Berhasil Diunggah Secara Enkripsi!";
+                    statusLabel.innerText = "Laporan Keuangan Berhasil Tersimpan Berbasis Enkripsi!";
                     statusLabel.style.color = "var(--success)";
                     filePicker.value = "";
                     submitBtn.disabled = false;
@@ -208,13 +206,12 @@
             }
 
         } catch (error) {
-            alert("Kesalahan Sistem: " + error.message);
+            alert("Kesalahan Jaringan/Sistem: " + error.message);
             statusLabel.innerText = "Gagal Mengunggah. Silakan coba kembali.";
             statusLabel.style.color = "red";
             submitBtn.disabled = false;
         }
     }
 </script>
-
 </body>
 </html>
